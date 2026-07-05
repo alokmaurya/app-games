@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Bubble Dash</title>
+<style>
+  :root {
+    --pink:   #ffd1e3;
+    --rose:   #ff90b3;
+    --mint:   #9be7c4;
+    --sky:    #a8d8ff;
+    --lav:    #c9b8ff;
+    --cream:  #fff6fb;
+    --ink:    #5a4b6b;
+    --shadow: rgba(90, 75, 107, 0.18);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    background: linear-gradient(160deg, #ffe3f1 0%, #e7d8ff 55%, #d3ecff 100%);
+    font-family: 'Baloo 2', 'Trebuchet MS', system-ui, sans-serif;
+    color: var(--ink);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #stage {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #wrap {
+    position: relative;
+    width: min(94vw, 440px);
+    aspect-ratio: 9 / 16;
+    max-height: 96vh;
+    border-radius: 28px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px -18px var(--shadow), 0 0 0 6px #fff inset;
+    background: linear-gradient(180deg, #fff0f8 0%, #eadcff 60%, #d8eeff 100%);
+  }
+
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  /* ---- Overlays ---- */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    text-align: center;
+    padding: 32px;
+    background: rgba(255, 246, 251, 0.55);
+    backdrop-filter: blur(3px);
+    transition: opacity 0.3s ease;
+  }
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .logo {
+    font-size: clamp(38px, 12vw, 60px);
+    font-weight: 800;
+    line-height: 0.92;
+    letter-spacing: -1px;
+    color: var(--rose);
+    text-shadow: 3px 3px 0 #fff, 6px 6px 0 var(--lav);
+  }
+  .logo span { color: var(--sky); text-shadow: 3px 3px 0 #fff, 6px 6px 0 var(--mint); }
+
+  .tag { font-size: 15px; font-weight: 600; opacity: 0.75; max-width: 240px; }
+
+  .btn {
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 20px;
+    color: #fff;
+    background: var(--rose);
+    border: none;
+    padding: 14px 34px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 6px 0 #e56f95, 0 12px 20px -6px var(--shadow);
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #e56f95; }
+  .btn:focus-visible { outline: 3px solid var(--sky); outline-offset: 3px; }
+
+  .keys {
+    font-size: 13px;
+    font-weight: 600;
+    opacity: 0.7;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .key {
+    display: inline-grid;
+    place-items: center;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 6px;
+    background: #fff;
+    border-radius: 7px;
+    box-shadow: 0 2px 0 #d9c9ec;
+    font-weight: 800;
+  }
+
+  .score-line { font-size: 17px; font-weight: 700; }
+  .big-score { font-size: clamp(50px, 16vw, 80px); font-weight: 800; color: var(--rose); line-height: 1; }
+  .best { font-size: 15px; font-weight: 700; opacity: 0.7; }
+  .newbest {
+    font-size: 14px; font-weight: 800; color: var(--mint);
+    background: #fff; padding: 4px 14px; border-radius: 999px;
+    box-shadow: 0 3px 0 #b7e6cf;
+  }
+
+  /* ---- Live HUD ---- */
+  #hud {
+    position: absolute;
+    top: 16px; left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 20px;
+    font-weight: 800;
+    pointer-events: none;
+    text-shadow: 0 2px 0 rgba(255,255,255,0.7);
+  }
+  #hud .label { font-size: 11px; letter-spacing: 1px; opacity: 0.55; display:block; }
+  #hud .val { font-size: 24px; }
+  #hud.hidden { display: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="wrap">
+    <canvas id="game"></canvas>
+
+    <div id="hud" class="hidden">
+      <div><span class="label">SCORE</span><span class="val" id="hudScore">0</span></div>
+      <div style="text-align:right"><span class="label">BEST</span><span class="val" id="hudBest">0</span></div>
+    </div>
+
+    <!-- Start -->
+    <div class="overlay" id="startScreen">
+      <div class="logo">Bubble<br><span>Dash</span></div>
+      <div class="tag">Dodge the grumpies, grab the sweeties, and see how far you can float!</div>
+      <button class="btn" id="playBtn">Play</button>
+      <div class="keys">
+        Move with
+        <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
+        or the
+        <span class="key">↑</span><span class="key">←</span><span class="key">↓</span><span class="key">→</span>
+        keys
+      </div>
+    </div>
+
+    <!-- Game over -->
+    <div class="overlay hidden" id="overScreen">
+      <div class="score-line">You floated for</div>
+      <div class="big-score" id="finalScore">0</div>
+      <div class="newbest hidden" id="newBest">✨ New Best! ✨</div>
+      <div class="best">Best: <span id="bestScore">0</span></div>
+      <button class="btn" id="againBtn">Play Again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  // Logical resolution (scaled to the canvas box). Portrait play field.
+  const W = 450, H = 800;
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---- State ----
+  const STATE = { START: 0, PLAY: 1, OVER: 2 };
+  let state = STATE.START;
+  let best = 0;
+
+  const hud = document.getElementById('hud');
+  const hudScore = document.getElementById('hudScore');
+  const hudBest = document.getElementById('hudBest');
+  const startScreen = document.getElementById('startScreen');
+  const overScreen = document.getElementById('overScreen');
+  const finalScoreEl = document.getElementById('finalScore');
+  const bestScoreEl = document.getElementById('bestScore');
+  const newBestEl = document.getElementById('newBest');
+
+  // ---- Player ----
+  const player = {
+    x: W / 2, y: H * 0.78, r: 26,
+    vx: 0, vy: 0,
+    squash: 1, mood: 'happy', moodTimer: 0
+  };
+
+  const SPEED = 0.9;      // acceleration
+  const FRICTION = 0.86;  // glide
+  const MAXV = 8.5;
+
+  let obstacles = [];
+  let goodies = [];
+  let particles = [];
+  let clouds = [];
+
+  let score = 0;
+  let elapsed = 0;
+  let spawnTimer = 0;
+  let goodyTimer = 0;
+  let shake = 0;
+
+  const keys = {};
+  const KEYMAP = {
+    ArrowLeft:'l', a:'l', A:'l',
+    ArrowRight:'r', d:'r', D:'r',
+    ArrowUp:'u', w:'u', W:'u',
+    ArrowDown:'dn', s:'dn', S:'dn'
+  };
+
+  window.addEventListener('keydown', e => {
+    if (KEYMAP[e.key]) { keys[KEYMAP[e.key]] = true; e.preventDefault(); }
+    if ((e.key === ' ' || e.key === 'Enter')) {
+      if (state === STATE.START) startGame();
+      else if (state === STATE.OVER) startGame();
+    }
+  });
+  window.addEventListener('keyup', e => { if (KEYMAP[e.key]) keys[KEYMAP[e.key]] = false; });
+
+  // Touch / pointer: drag to steer
+  let pointerActive = false, pTarget = null;
+  function toLocal(ev) {
+    const rect = canvas.getBoundingClientRect();
+    const cx = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
+    const cy = (ev.touches ? ev.touches[0].clientY : ev.clientY) - rect.top;
+    return { x: cx / rect.width * W, y: cy / rect.height * H };
+  }
+  canvas.addEventListener('pointerdown', e => { pointerActive = true; pTarget = toLocal(e); });
+  canvas.addEventListener('pointermove', e => { if (pointerActive) pTarget = toLocal(e); });
+  window.addEventListener('pointerup', () => { pointerActive = false; pTarget = null; });
+
+  // ---- Palette for cute entities ----
+  const OB_COLORS = ['#ff8fb0', '#ff6f91', '#c9a3ff', '#8fb8ff'];
+  const GD_COLORS = ['#ffe27a', '#9be7c4', '#ffb3d9'];
+
+  function makeClouds() {
+    clouds = [];
+    for (let i = 0; i < 5; i++) {
+      clouds.push({ x: Math.random()*W, y: Math.random()*H, s: 0.4 + Math.random()*0.7, spd: 0.15 + Math.random()*0.25 });
+    }
+  }
+  makeClouds();
+
+  function reset() {
+    obstacles = []; goodies = []; particles = [];
+    score = 0; elapsed = 0; spawnTimer = 0; goodyTimer = 60; shake = 0;
+    player.x = W/2; player.y = H*0.78; player.vx = 0; player.vy = 0;
+    player.mood = 'happy'; player.moodTimer = 0; player.squash = 1;
+  }
+
+  function startGame() {
+    reset();
+    state = STATE.PLAY;
+    startScreen.classList.add('hidden');
+    overScreen.classList.add('hidden');
+    hud.classList.remove('hidden');
+    hudBest.textContent = best;
+  }
+
+  function endGame() {
+    state = STATE.OVER;
+    player.mood = 'dizzy';
+    burst(player.x, player.y, '#ff90b3', 26);
+    shake = 16;
+    const finalPts = Math.floor(score);
+    finalScoreEl.textContent = finalPts;
+    const isBest = finalPts > best;
+    if (isBest) best = finalPts;
+    bestScoreEl.textContent = best;
+    newBestEl.classList.toggle('hidden', !isBest);
+    hud.classList.add('hidden');
+    // brief delay before showing the panel so the crash reads
+    setTimeout(() => overScreen.classList.remove('hidden'), 420);
+  }
+
+  function burst(x, y, color, n) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 1 + Math.random() * 5;
+      particles.push({
+        x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 1,
+        life: 1, r: 2 + Math.random()*4, color
+      });
+    }
+  }
+
+  // ---- Spawning ----
+  function difficulty() { return Math.min(1, elapsed / 3600); } // ramps over ~60s
+
+  function spawnObstacle() {
+    const d = difficulty();
+    const r = 16 + Math.random() * 18;
+    obstacles.push({
+      x: r + Math.random() * (W - 2*r),
+      y: -r - 10,
+      r,
+      vy: 2.4 + d * 4.2 + Math.random() * 1.5,
+      vx: (Math.random() - 0.5) * (1 + d * 2),
+      color: OB_COLORS[(Math.random()*OB_COLORS.length)|0],
+      spin: Math.random() * Math.PI,
+      spinV: (Math.random() - 0.5) * 0.08
+    });
+  }
+
+  function spawnGoody() {
+    const r = 15;
+    goodies.push({
+      x: r + Math.random() * (W - 2*r),
+      y: -r - 10,
+      r,
+      vy: 2.6 + difficulty() * 2.5,
+      color: GD_COLORS[(Math.random()*GD_COLORS.length)|0],
+      bob: Math.random() * Math.PI * 2
+    });
+  }
+
+  // ---- Update ----
+  function update() {
+    // clouds always drift (ambient)
+    for (const c of clouds) {
+      c.y += c.spd;
+      if (c.y > H + 40) { c.y = -40; c.x = Math.random()*W; }
+    }
+
+    if (state !== STATE.PLAY) {
+      updateParticles();
+      if (shake > 0) shake *= 0.85;
+      return;
+    }
+
+    elapsed++;
+    score += 0.12 + difficulty() * 0.12;
+
+    // input -> velocity
+    let ax = 0, ay = 0;
+    if (keys.l) ax -= SPEED;
+    if (keys.r) ax += SPEED;
+    if (keys.u) ay -= SPEED;
+    if (keys.dn) ay += SPEED;
+
+    if (pTarget) {
+      const dx = pTarget.x - player.x, dy = pTarget.y - player.y;
+      ax += Math.max(-1, Math.min(1, dx * 0.06)) * SPEED * 1.6;
+      ay += Math.max(-1, Math.min(1, dy * 0.06)) * SPEED * 1.6;
+    }
+
+    player.vx = Math.max(-MAXV, Math.min(MAXV, (player.vx + ax) * FRICTION));
+    player.vy = Math.max(-MAXV, Math.min(MAXV, (player.vy + ay) * FRICTION));
+    player.x += player.vx;
+    player.y += player.vy;
+
+    // keep on field
+    const m = player.r;
+    player.x = Math.max(m, Math.min(W - m, player.x));
+    player.y = Math.max(m, Math.min(H - m, player.y));
+
+    // squash based on speed
+    const spd = Math.hypot(player.vx, player.vy);
+    player.squash = 1 + Math.min(0.25, spd * 0.02);
+
+    // mood decay
+    if (player.moodTimer > 0) { player.moodTimer--; if (player.moodTimer === 0) player.mood = 'happy'; }
+
+    // spawn obstacles
+    spawnTimer--;
+    if (spawnTimer <= 0) {
+      spawnObstacle();
+      spawnTimer = Math.max(14, 42 - difficulty() * 26);
+    }
+    // spawn goodies
+    goodyTimer--;
+    if (goodyTimer <= 0) { spawnGoody(); goodyTimer = 130 + Math.random()*120; }
+
+    // move obstacles + collide
+    let nearDanger = false;
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      const o = obstacles[i];
+      o.y += o.vy; o.x += o.vx; o.spin += o.spinV;
+      if (o.x < o.r || o.x > W - o.r) o.vx *= -1;
+      if (o.y - o.r > H) { obstacles.splice(i, 1); continue; }
+
+      const dist = Math.hypot(o.x - player.x, o.y - player.y);
+      if (dist < o.r + player.r - 6) { endGame(); return; }
+      if (dist < o.r + player.r + 42) nearDanger = true;
+    }
+    if (nearDanger && player.mood !== 'yay') { player.mood = 'scared'; }
+    else if (player.mood === 'scared' && !nearDanger) { player.mood = 'happy'; }
+
+    // move goodies + collect
+    for (let i = goodies.length - 1; i >= 0; i--) {
+      const g = goodies[i];
+      g.y += g.vy; g.bob += 0.15;
+      g.x += Math.sin(g.bob) * 0.6;
+      if (g.y - g.r > H) { goodies.splice(i, 1); continue; }
+      const dist = Math.hypot(g.x - player.x, g.y - player.y);
+      if (dist < g.r + player.r) {
+        goodies.splice(i, 1);
+        score += 25;
+        player.mood = 'yay'; player.moodTimer = 30;
+        burst(g.x, g.y, g.color, 14);
+      }
+    }
+
+    updateParticles();
+    if (shake > 0) shake *= 0.88;
+    hudScore.textContent = Math.floor(score);
+  }
+
+  function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life -= 0.025;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+  }
+
+  // ---- Draw ----
+  function drawFace(x, y, r, mood) {
+    ctx.fillStyle = '#5a4b6b';
+    const eo = r * 0.32; // eye offset
+    const ey = y - r * 0.12;
+    if (mood === 'dizzy') {
+      ctx.lineWidth = 3; ctx.strokeStyle = '#5a4b6b';
+      for (const s of [-1, 1]) {
+        ctx.beginPath(); ctx.moveTo(x+s*eo-5, ey-5); ctx.lineTo(x+s*eo+5, ey+5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x+s*eo+5, ey-5); ctx.lineTo(x+s*eo-5, ey+5); ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(x, y + r*0.28, 5, 0, Math.PI*2); ctx.fill();
+      return;
+    }
+    // eyes
+    const eyeR = mood === 'scared' ? 5.5 : 4.5;
+    ctx.beginPath(); ctx.arc(x - eo, ey, eyeR, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + eo, ey, eyeR, 0, Math.PI*2); ctx.fill();
+    // shine
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(x - eo + 1.5, ey - 1.5, 1.6, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + eo + 1.5, ey - 1.5, 1.6, 0, Math.PI*2); ctx.fill();
+    // mouth
+    ctx.strokeStyle = '#5a4b6b'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath();
+    const my = y + r * 0.3;
+    if (mood === 'yay') { ctx.arc(x, my - 3, 7, 0.15*Math.PI, 0.85*Math.PI); }
+    else if (mood === 'scared') { ctx.arc(x, my + 4, 5, 1.1*Math.PI, 1.9*Math.PI); }
+    else { ctx.arc(x, my - 2, 6, 0.15*Math.PI, 0.85*Math.PI); }
+    ctx.stroke();
+    // cheeks
+    ctx.fillStyle = 'rgba(255,140,170,0.5)';
+    ctx.beginPath(); ctx.arc(x - r*0.55, y + r*0.15, 4, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + r*0.55, y + r*0.15, 4, 0, Math.PI*2); ctx.fill();
+  }
+
+  function drawBlob() {
+    const t = elapsed * 0.1;
+    const wob = reduceMotion ? 1 : (1 + Math.sin(t) * 0.03);
+    const sx = player.squash * wob;
+    const sy = (2 - player.squash) / wob;
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    // shadow
+    ctx.fillStyle = 'rgba(90,75,107,0.12)';
+    ctx.beginPath(); ctx.ellipse(0, player.r + 6, player.r*0.8, 6, 0, 0, Math.PI*2); ctx.fill();
+    ctx.scale(sx, sy);
+    // body
+    const grad = ctx.createRadialGradient(-8, -10, 4, 0, 0, player.r);
+    grad.addColorStop(0, '#c6fff0');
+    grad.addColorStop(1, '#7fdcb8');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(0, 0, player.r, 0, Math.PI*2); ctx.fill();
+    // rim
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(-6, -8, player.r*0.55, Math.PI*1.1, Math.PI*1.7); ctx.stroke();
+    ctx.restore();
+    drawFace(player.x, player.y, player.r, player.mood);
+  }
+
+  function drawObstacle(o) {
+    ctx.save();
+    ctx.translate(o.x, o.y);
+    ctx.rotate(o.spin);
+    // spiky-ish grumpy blob
+    ctx.fillStyle = o.color;
+    ctx.beginPath();
+    const spikes = 8;
+    for (let i = 0; i < spikes * 2; i++) {
+      const ang = (i / (spikes*2)) * Math.PI * 2;
+      const rad = i % 2 === 0 ? o.r : o.r * 0.82;
+      ctx.lineTo(Math.cos(ang)*rad, Math.sin(ang)*rad);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // grumpy face (unrotated)
+    ctx.fillStyle = '#5a4b6b';
+    const eo = o.r * 0.3;
+    ctx.beginPath(); ctx.arc(o.x - eo, o.y - 2, 2.6, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(o.x + eo, o.y - 2, 2.6, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#5a4b6b'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(o.x, o.y + o.r*0.35, 4, 1.15*Math.PI, 1.85*Math.PI); ctx.stroke();
+  }
+
+  function drawGoody(g) {
+    const pulse = 1 + Math.sin(g.bob) * 0.12;
+    ctx.save();
+    ctx.translate(g.x, g.y);
+    ctx.scale(pulse, pulse);
+    // star
+    ctx.fillStyle = g.color;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const ang = (i / 10) * Math.PI * 2 - Math.PI/2;
+      const rad = i % 2 === 0 ? g.r : g.r * 0.46;
+      ctx.lineTo(Math.cos(ang)*rad, Math.sin(ang)*rad);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.arc(-g.r*0.2, -g.r*0.2, g.r*0.18, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if (shake > 0.5) ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+
+    // clouds
+    for (const c of clouds) {
+      ctx.fillStyle = `rgba(255,255,255,${0.35 * c.s})`;
+      const cw = 60 * c.s;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, cw*0.5, 0, Math.PI*2);
+      ctx.arc(c.x + cw*0.5, c.y + 4, cw*0.4, 0, Math.PI*2);
+      ctx.arc(c.x - cw*0.5, c.y + 6, cw*0.35, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    for (const g of goodies) drawGoody(g);
+    for (const o of obstacles) drawObstacle(o);
+
+    // particles
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    if (state !== STATE.OVER) drawBlob();
+
+    ctx.restore();
+  }
+
+  function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+  loop();
+
+  // ---- Buttons ----
+  document.getElementById('playBtn').addEventListener('click', startGame);
+  document.getElementById('againBtn').addEventListener('click', startGame);
+})();
+</script>
+</body>
+</html>
